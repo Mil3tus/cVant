@@ -44,3 +44,21 @@ pub fn insert_arp_table(ip_addr: &str, mac_addr: &str, vendor: &str, timestamp: 
 
     Ok(())
 }
+
+
+
+
+// insere dados de log no banco de dados
+pub fn insert_log_information(event_function: &str, event_description: &str, timestamp: &str) -> mysql::Result<()> {
+    //url da conexão
+    let url = "mysql://cvant:k6jg2210-30@127.0.0.1:3306/cvant";
+    // cria o pool para receber a conexão do MySQL
+    let pool = Pool::new(url)?;
+    // cria objeto de conexão
+    let mut conn = pool.get_conn()?;
+
+    conn.exec_drop("INSERT INTO logtable (event_function, event_description, timestamp) VALUES (:event_function, :event_description, :timestamp)",
+    mysql::params!{"event_function" => event_function, "event_description" => event_description, "timestamp" => timestamp,})?;
+
+    Ok(())
+}
