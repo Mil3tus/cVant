@@ -29,18 +29,18 @@ pub fn check_mac_prefix(mac_address: &str) -> mysql::Result<String> {
 
 
 // insere no banco de dados a máquina encontrada com o respectivo fabricante e macadress
-pub fn insert_arp_table(ip_addr: &str, mac_addr: &str, vendor: &str) -> mysql::Result<()> {
+pub fn insert_arp_table(ip_addr: &str, mac_addr: &str, vendor: &str, timestamp: &str) -> mysql::Result<()> {
     // url de conexão
     let url = "mysql://cvant:k6jg2210-30@127.0.0.1:3306/cvant";
     // cria o pool para receber a conexão do MySQL
     let pool = Pool::new(url)?;
     // cria a conexão 
     let mut conn = pool.get_conn()?;
-    // monta a query
-    let query_sql = format!("INSERT INTO arptable (ip_addr, mac_addr, vendor) VALUES('{ip_addr}', '{mac_addr}', '{vendor}');");
+    // é camera ? false
+    let is_camera = "false";
     // executa a query porém SEM RETORNAR nada do resultado, por isso o .exec_drop
-    conn.exec_drop("INSERT INTO arptable (ip_addr, mac_addr, vendor) VALUES (:ip_addr, :mac_addr, :vendor)",
-    mysql::params!{"ip_addr" => ip_addr,"mac_addr" => mac_addr,"vendor" => vendor,},)?;
+    conn.exec_drop("INSERT INTO arptable (ip_addr, mac_addr, vendor, timestamp) VALUES (:ip_addr, :mac_addr, :vendor, :timestamp)",
+    mysql::params!{"ip_addr" => ip_addr,"mac_addr" => mac_addr,"vendor" => vendor,"timestamp" => timestamp},)?;
 
     Ok(())
 }

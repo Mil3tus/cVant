@@ -421,11 +421,15 @@ pub fn scan() -> Result<(), ArpError> {
                 );
 
                 // mac slice
-                let mac_prefix: &str = &mac_addr [0..8];
+                let mac_prefix: &str = &mac_addr[0..8];
+                // formata hora
+                let timestamp_mysql = timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
+
+
                 match check_mac_prefix(mac_prefix) {
                     Ok(mac_factory) => {
                         let ip_addr = target_ip.to_string();
-                        let _resultado = insert_arp_table(&ip_addr, &mac_addr, &mac_factory);
+                        let _resultado = insert_arp_table(&ip_addr, &mac_addr, &mac_factory, &timestamp_mysql);
                     }
                     Err(error) => {
                         eprintln!("Erro ao consultar fabricante: {}", error);

@@ -10,7 +10,7 @@ conn = mysql.connector.connect(
 
 cursor = conn.cursor()
 
-with open("mac-vendor.txt", "r", encoding="utf-8") as arquivo:
+with open("2.txt", "r", encoding="utf-8") as arquivo:
     for linha in arquivo:
         dados = linha.strip().split("\t")
 
