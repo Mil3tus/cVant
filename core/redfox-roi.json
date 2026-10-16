@@ -1,0 +1,29 @@
+{
+  "type": "polygon",
+  "image_width": 640,
+  "image_height": 480,
+  "closed": false,
+  "points": [
+    {
+      "x": 188,
+      "y": 40
+    },
+    {
+      "x": 174,
+      "y": 459
+    },
+    {
+      "x": 292,
+      "y": 467
+    },
+    {
+      "x": 331,
+      "y": 34
+    },
+    {
+      "x": 190,
+      "y": 37
+    }
+  ],
+  "rust_example": "let roi_points: Vec<opencv::core::Point> = vec![/* Point::new(x, y), ... */];"
+}
