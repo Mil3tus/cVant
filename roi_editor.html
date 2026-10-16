@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RedFox — Editor de Área de Interesse</title>
+<style>
+  :root { color-scheme: dark; --bg:#101114; --panel:#191b20; --line:#30343c; --text:#f1f3f5; --muted:#a5abb5; --red:#f04444; --green:#63d39a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
+  header { padding:22px clamp(16px,4vw,42px); border-bottom:1px solid var(--line); }
+  .brand { font-weight:800; letter-spacing:.12em; font-size:13px; color:var(--red); }
+  h1 { margin:7px 0 4px; font-size:clamp(24px,3vw,34px); }
+  header p { margin:0; color:var(--muted); max-width:780px; }
+  main { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr); gap:18px; padding:20px clamp(12px,3vw,32px) 32px; max-width:1500px; margin:auto; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; min-width:0; }
+  .panel-head { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .panel-head h2 { font-size:16px; margin:0; }
+  .panel-body { padding:16px; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:center; }
+  button,.file-label { background:#262a31; color:var(--text); border:1px solid #414650; border-radius:8px; padding:9px 12px; font:inherit; cursor:pointer; }
+  button:hover,.file-label:hover { border-color:#858d9a; }
+  button.primary { background:var(--red); border-color:var(--red); color:#fff; font-weight:700; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  input[type=file] { display:none; }
+  .stage { background:#090a0c; border:1px solid #373b43; border-radius:10px; padding:8px; display:flex; justify-content:center; align-items:center; min-height:220px; }
+  canvas { display:block; width:min(100%, 640px); height:auto; aspect-ratio:4/3; background:#17191e; cursor:crosshair; touch-action:manipulation; }
+  .hint { color:var(--muted); font-size:13px; margin:10px 2px 0; }
+  .status { color:var(--green); font-size:13px; min-height:19px; margin-top:10px; }
+  .fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  label.field { display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--muted); }
+  input[type=number], select { width:100%; background:#101216; color:var(--text); border:1px solid #414650; border-radius:8px; padding:9px; font:inherit; }
+  .field.full { grid-column:1/-1; }
+  .checkrow { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; margin-top:12px; }
+  .points { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
+  .point-chip { font-size:12px; color:#f5f5f5; background:#2a2e36; border:1px solid #444a55; border-radius:999px; padding:5px 8px; }
+  textarea { width:100%; min-height:260px; resize:vertical; background:#0d0f12; color:#d6f4df; border:1px solid #414650; border-radius:9px; padding:12px; font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
+  .json-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .small { font-size:12px; color:var(--muted); }
+  .notice { padding:11px 12px; border-radius:8px; background:#22252b; border-left:3px solid var(--red); font-size:13px; color:#d9dce2; margin-top:14px; }
+  @media(max-width:900px) { main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">REDFOX / VISION LAB</div>
+  <h1>Editor de Área de Interesse</h1>
+  <p>Carregue uma imagem, clique para marcar os vértices de uma região e gere coordenadas em JSON para usar no seu código Rust/OpenCV.</p>
+</header>
+<main>
+  <section class="panel">
+    <div class="panel-head"><h2>1. Imagem e desenho da região</h2><span class="small">Coordenadas: 640 × 480</span></div>
+    <div class="panel-body">
+      <div class="toolbar">
+        <label class="file-label" for="imageInput">Carregar imagem</label>
+        <input id="imageInput" type="file" accept="image/*">
+        <button id="closePolygon" class="primary" disabled>Fechar polígono</button>
+        <button id="undo" disabled>Desfazer ponto</button>
+        <button id="clear" disabled>Limpar pontos</button>
+        <button id="resetImage">Imagem de exemplo</button>
+      </div>
+      <div class="stage"><canvas id="canvas" width="640" height="480" aria-label="Imagem para marcar pontos"></canvas></div>
+      <div class="hint">Clique na imagem para adicionar vértices no sentido horário ou anti-horário. Clique em “Fechar polígono” para ligar o último ponto ao primeiro. Você pode continuar movendo pontos clicando em “Desfazer ponto” e marcando novamente.</div>
+      <div id="status" class="status" role="status">Carregue uma imagem ou use a imagem de exemplo para começar.</div>
+      <div id="pointList" class="points"></div>
+    </div>
+  </section>
+  <aside class="panel">
+    <div class="panel-head"><h2>2. Parâmetros e JSON</h2></div>
+    <div class="panel-body">
+      <div class="fields">
+        <label class="field">Largura da referência (px)
+          <input id="imgWidth" type="number" min="1" max="10000" value="640">
+        </label>
+        <label class="field">Altura da referência (px)
+          <input id="imgHeight" type="number" min="1" max="10000" value="480">
+        </label>
+        <label class="field full">Formato de saída
+          <select id="outputMode">
+            <option value="polygon">Polígono (qualquer figura com 3+ pontos)</option>
+            <option value="rect">Retângulo delimitador (bounding box)</option>
+          </select>
+        </label>
+      </div>
+      <label class="checkrow"><input id="normalized" type="checkbox"> Incluir também coordenadas normalizadas (0–1)</label>
+      <label class="checkrow"><input id="includeRust" type="checkbox" checked> Incluir exemplo de estrutura Rust</label>
+      <div class="notice">A imagem é desenhada dentro de uma área fixa de 640 × 480. Se a imagem carregada tiver outra resolução, ela será redimensionada para essa referência; as coordenadas geradas correspondem a essa imagem de referência.</div>
+      <h3 style="font-size:14px;margin:18px 0 8px">JSON gerado</h3>
+      <textarea id="output" spellcheck="false" aria-label="JSON de saída" readonly></textarea>
+      <div class="json-actions">
+        <button id="copy">Copiar JSON</button>
+        <button id="download">Baixar .json</button>
+      </div>
+      <p class="small">No OpenCV, pontos podem ser convertidos para <code>opencv::core::Point</code> e o polígono pode ser usado como máscara ou região de interesse. O JSON não é consumido diretamente por <code>Rect</code>, que representa apenas retângulos.</p>
+    </div>
+  </aside>
+</main>
+<script>
+(() => {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const imageInput = document.getElementById('imageInput');
+  const status = document.getElementById('status');
+  const output = document.getElementById('output');
+  const pointList = document.getElementById('pointList');
+  const closeBtn = document.getElementById('closePolygon');
+  const undoBtn = document.getElementById('undo');
+  const clearBtn = document.getElementById('clear');
+  const imgWidth = document.getElementById('imgWidth');
+  const imgHeight = document.getElementById('imgHeight');
+  const normalized = document.getElementById('normalized');
+  const includeRust = document.getElementById('includeRust');
+  const outputMode = document.getElementById('outputMode');
+  let image = null;
+  let points = [];
+  let closed = false;
+
+  function drawExample() {
+    const g = ctx.createLinearGradient(0, 0, 640, 480);
+    g.addColorStop(0, '#252b34'); g.addColorStop(1, '#11151a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 640, 480);
+    // illustrative surveillance-scene backdrop
+    ctx.fillStyle = '#303741'; ctx.fillRect(0, 300, 640, 180);
+    ctx.strokeStyle = '#3e4651'; ctx.lineWidth = 1;
+    for (let x=0; x<640; x+=40) { ctx.beginPath(); ctx.moveTo(x,300); ctx.lineTo(x,480); ctx.stroke(); }
+    ctx.fillStyle = '#46515d'; ctx.fillRect(65, 80, 150, 220);
+    ctx.fillStyle = '#596574'; ctx.fillRect(85, 100, 45, 70); ctx.fillRect(145, 100, 45, 70);
+    ctx.fillStyle = '#77818c'; ctx.beginPath(); ctx.arc(390, 180, 27, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#66717e'; ctx.fillRect(362, 208, 56, 112);
+    ctx.fillStyle = '#535e6b'; ctx.fillRect(350, 315, 24, 95); ctx.fillRect(406, 315, 24, 95);
+    ctx.fillStyle = '#9ca5af'; ctx.font = '14px system-ui'; ctx.fillText('Imagem demonstrativa — carregue sua imagem', 16, 28);
+  }
+
+  function draw() {
+    ctx.clearRect(0,0,640,480);
+    if (image) {
+      ctx.drawImage(image, 0, 0, 640, 480);
+    } else {
+      drawExample();
+    }
+    if (points.length > 1) {
+      ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+      for (let i=1; i<points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+      if (closed) ctx.closePath();
+      ctx.strokeStyle = '#ff3e48'; ctx.lineWidth = 2.5; ctx.stroke();
+      if (closed) {
+        ctx.fillStyle = 'rgba(240,68,68,.18)'; ctx.fill();
+      }
+    }
+    points.forEach((p,i) => {
+      ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#f04444'; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui';
+      ctx.fillText(String(i+1), p.x+8, p.y-8);
+    });
+    closeBtn.disabled = points.length < 3 || closed;
+    undoBtn.disabled = points.length === 0;
+    clearBtn.disabled = points.length === 0;
+    updatePointList();
+    updateOutput();
+  }
+
+  function updatePointList() {
+    pointList.innerHTML = '';
+    points.forEach((p,i) => {
+      const chip = document.createElement('span');
+      chip.className = 'point-chip';
+      chip.textContent = `P${i+1}: (${p.x}, ${p.y})`;
+      pointList.appendChild(chip);
+    });
+    if (!points.length) {
+      const chip = document.createElement('span');
+      chip.className = 'point-chip'; chip.textContent = 'Nenhum ponto marcado';
+      pointList.appendChild(chip);
+    }
+  }
+
+  function updateOutput() {
+    const w = Math.max(1, Number.parseInt(imgWidth.value,10) || 640);
+    const h = Math.max(1, Number.parseInt(imgHeight.value,10) || 480);
+    let data;
+    if (outputMode.value === 'rect' && points.length) {
+      const xs = points.map(p=>p.x), ys = points.map(p=>p.y);
+      const x = Math.min(...xs), y = Math.min(...ys);
+      data = {
+        type: 'rectangle',
+        image_width: w, image_height: h,
+        roi: { x, y, width: Math.max(...xs)-x, height: Math.max(...ys)-y }
+      };
+    } else {
+      data = {
+        type: 'polygon',
+        image_width: w, image_height: h,
+        closed,
+        points: points.map(p=>({x:p.x, y:p.y}))
+      };
+    }
+    if (normalized.checked) {
+      if (data.type === 'polygon') {
+        data.normalized_points = points.map(p=>({
+          x: Number((p.x / 640).toFixed(6)),
+          y: Number((p.y / 480).toFixed(6))
+        }));
+      } else if (data.roi) {
+        data.normalized_roi = {
+          x: Number((data.roi.x/640).toFixed(6)),
+          y: Number((data.roi.y/480).toFixed(6)),
+          width: Number((data.roi.width/640).toFixed(6)),
+          height: Number((data.roi.height/480).toFixed(6))
+        };
+      }
+    }
+    if (includeRust.checked) {
+      data.rust_example = data.type === 'polygon'
+        ? 'let roi_points: Vec<opencv::core::Point> = vec![/* Point::new(x, y), ... */];'
+        : 'let roi = opencv::core::Rect::new(x, y, width, height);';
+    }
+    output.value = JSON.stringify(data, null, 2);
+  }
+
+  canvas.addEventListener('click', (event) => {
+    if (closed) {
+      status.textContent = 'Polígono fechado. Limpe os pontos ou desfaça o último ponto para começar outro.';
+      return;
+    }
+    const r = canvas.getBoundingClientRect();
+    const x = Math.round((event.clientX-r.left) * 640 / r.width);
+    const y = Math.round((event.clientY-r.top) * 480 / r.height);
+    points.push({x: Math.max(0,Math.min(640,x)), y: Math.max(0,Math.min(480,y))});
+    status.textContent = `Ponto ${points.length} adicionado: (${points.at(-1).x}, ${points.at(-1).y}).`;
+    draw();
+  });
+
+  imageInput.addEventListener('change', () => {
+    const file = imageInput.files && imageInput.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      status.textContent = 'Selecione um arquivo de imagem válido.'; return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      image = img; points = []; closed = false;
+      status.textContent = `Imagem carregada (${img.naturalWidth} × ${img.naturalHeight}); exibida na referência 640 × 480.`;
+      draw(); URL.revokeObjectURL(url);
+    };
+    img.onerror = () => { status.textContent = 'Não foi possível carregar essa imagem.'; URL.revokeObjectURL(url); };
+    img.src = url;
+  });
+
+  closeBtn.addEventListener('click', () => {
+    if (points.length >= 3) { closed = true; status.textContent = 'Polígono fechado. O JSON foi atualizado.'; draw(); }
+  });
+  undoBtn.addEventListener('click', () => {
+    if (closed) closed = false;
+    points.pop(); status.textContent = 'Último ponto removido.'; draw();
+  });
+  clearBtn.addEventListener('click', () => {
+    points = []; closed = false; status.textContent = 'Pontos removidos.'; draw();
+  });
+  document.getElementById('resetImage').addEventListener('click', () => {
+    image = null; imageInput.value = ''; points = []; closed = false;
+    status.textContent = 'Imagem de exemplo pronta. Carregue sua imagem para começar.'; draw();
+  });
+  [imgWidth,imgHeight,normalized,includeRust,outputMode].forEach(el => {
+    el.addEventListener('input', updateOutput);
+    el.addEventListener('change', updateOutput);
+  });
+  document.getElementById('copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(output.value);
+      status.textContent = 'JSON copiado para a área de transferência.';
+    } catch {
+      output.focus(); output.select();
+      status.textContent = 'Selecione o JSON e copie manualmente (Ctrl+C).';
+    }
+  });
+  document.getElementById('download').addEventListener('click', () => {
+    const blob = new Blob([output.value+'\n'], {type:'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'redfox-roi.json';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    status.textContent = 'Arquivo redfox-roi.json gerado.';
+  });
+  draw();
+})();
+</script>
+</body>
+</html>
